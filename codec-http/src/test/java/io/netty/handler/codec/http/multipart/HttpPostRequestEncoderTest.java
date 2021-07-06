@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,21 +18,22 @@ package io.netty.handler.codec.http.multipart;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.HttpConstants;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder.EncoderMode;
 import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder.ErrorDataEncoderException;
 import io.netty.util.CharsetUtil;
 import io.netty.util.internal.StringUtil;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.List;
 
@@ -40,10 +41,10 @@ import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_DISPOSITION;
 import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;
 import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TRANSFER_ENCODING;
 import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /** {@link HttpPostRequestEncoder} test case. */
 public class HttpPostRequestEncoderTest {
@@ -139,9 +140,11 @@ public class HttpPostRequestEncoderTest {
         HttpPostRequestEncoder encoder = new HttpPostRequestEncoder(request, true);
         File file1 = new File(getClass().getResource("/file-01.txt").toURI());
         File file2 = new File(getClass().getResource("/file-02.txt").toURI());
+        File file3 = new File(getClass().getResource("/file-03.txt").toURI());
         encoder.addBodyAttribute("foo", "bar");
         encoder.addBodyFileUpload("quux", file1, "text/plain", false);
         encoder.addBodyFileUpload("quux", file2, "text/plain", false);
+        encoder.addBodyFileUpload("quux", file3, "text/plain", false);
 
         // We have to query the value of these two fields before finalizing
         // the request, which unsets one of them.
@@ -160,7 +163,7 @@ public class HttpPostRequestEncoderTest {
                 CONTENT_TYPE + ": multipart/mixed; boundary=" + multipartMixedBoundary + "\r\n" +
                 "\r\n" +
                 "--" + multipartMixedBoundary + "\r\n" +
-                CONTENT_DISPOSITION + ": attachment; filename=\"file-02.txt\"" + "\r\n" +
+                CONTENT_DISPOSITION + ": attachment; filename=\"file-01.txt\"" + "\r\n" +
                 CONTENT_LENGTH + ": " + file1.length() + "\r\n" +
                 CONTENT_TYPE + ": text/plain" + "\r\n" +
                 CONTENT_TRANSFER_ENCODING + ": binary" + "\r\n" +
@@ -174,6 +177,14 @@ public class HttpPostRequestEncoderTest {
                 CONTENT_TRANSFER_ENCODING + ": binary" + "\r\n" +
                 "\r\n" +
                 "File 02" + StringUtil.NEWLINE +
+                "\r\n" +
+                "--" + multipartMixedBoundary + "\r\n" +
+                CONTENT_DISPOSITION + ": attachment; filename=\"file-03.txt\"" + "\r\n" +
+                CONTENT_LENGTH + ": " + file3.length() + "\r\n" +
+                CONTENT_TYPE + ": text/plain" + "\r\n" +
+                CONTENT_TRANSFER_ENCODING + ": binary" + "\r\n" +
+                "\r\n" +
+                "File 03" + StringUtil.NEWLINE +
                 "\r\n" +
                 "--" + multipartMixedBoundary + "--" + "\r\n" +
                 "--" + multipartDataBoundary + "--" + "\r\n";
@@ -334,9 +345,9 @@ public class HttpPostRequestEncoderTest {
             HttpContent httpContent = encoder.readChunk((ByteBufAllocator) null);
             ByteBuf content = httpContent.content();
             int refCnt = content.refCnt();
-            assertTrue("content: " + content + " content.unwrap(): " + content.unwrap() + " refCnt: " + refCnt,
-                    (content.unwrap() == content || content.unwrap() == null) && refCnt == 1 ||
-                    content.unwrap() != content && refCnt == 2);
+            assertTrue((content.unwrap() == content || content.unwrap() == null) && refCnt == 1 ||
+                    content.unwrap() != content && refCnt == 2,
+                    "content: " + content + " content.unwrap(): " + content.unwrap() + " refCnt: " + refCnt);
             httpContent.release();
         }
         encoder.cleanFiles();
@@ -390,10 +401,10 @@ public class HttpPostRequestEncoderTest {
         checkNextChunkSize(encoder, 8080);
 
         HttpContent httpContent = encoder.readChunk((ByteBufAllocator) null);
-        assertTrue("Expected LastHttpContent is not received", httpContent instanceof LastHttpContent);
+        assertTrue(httpContent instanceof LastHttpContent, "Expected LastHttpContent is not received");
         httpContent.release();
 
-           assertTrue("Expected end of input is not receive", encoder.isEndOfInput());
+           assertTrue(encoder.isEndOfInput(), "Expected end of input is not receive");
     }
 
     @Test
@@ -412,10 +423,10 @@ public class HttpPostRequestEncoderTest {
         checkNextChunkSize(encoder, 8080);
 
         HttpContent httpContent = encoder.readChunk((ByteBufAllocator) null);
-        assertTrue("Expected LastHttpContent is not received", httpContent instanceof LastHttpContent);
+        assertTrue(httpContent instanceof LastHttpContent, "Expected LastHttpContent is not received");
         httpContent.release();
 
-        assertTrue("Expected end of input is not receive", encoder.isEndOfInput());
+        assertTrue(encoder.isEndOfInput(), "Expected end of input is not receive");
     }
 
     private static void checkNextChunkSize(HttpPostRequestEncoder encoder, int sizeWithoutDelimiter) throws Exception {
@@ -430,8 +441,31 @@ public class HttpPostRequestEncoderTest {
 
         int readable = httpContent.content().readableBytes();
         boolean expectedSize = readable >= expectedSizeMin && readable <= expectedSizeMax;
-        assertTrue("Chunk size is not in expected range (" + expectedSizeMin + " - " + expectedSizeMax + "), was: "
-                + readable, expectedSize);
+        assertTrue(expectedSize, "Chunk size is not in expected range (" + expectedSizeMin + " - "
+                + expectedSizeMax + "), was: " + readable);
         httpContent.release();
+    }
+
+    @Test
+    public void testEncodeChunkedContent() throws Exception {
+        HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
+        HttpPostRequestEncoder encoder = new HttpPostRequestEncoder(req, false);
+
+        int length = 8077 + 8096;
+        char[] array = new char[length];
+        Arrays.fill(array, 'a');
+        String longText = new String(array);
+
+        encoder.addBodyAttribute("data", longText);
+        encoder.addBodyAttribute("moreData", "abcd");
+
+        assertNotNull(encoder.finalizeRequest());
+
+        while (!encoder.isEndOfInput()) {
+            encoder.readChunk((ByteBufAllocator) null).release();
+        }
+
+        assertTrue(encoder.isEndOfInput());
+        encoder.cleanFiles();
     }
 }

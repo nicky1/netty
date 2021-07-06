@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,7 +17,6 @@ package io.netty.testsuite.transport.socket;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -27,8 +26,8 @@ import io.netty.channel.socket.InternetProtocolFamily;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.testsuite.transport.TestsuitePermutation;
 import io.netty.util.internal.SocketUtils;
-import org.junit.Assume;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -41,19 +40,28 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class DatagramMulticastTest extends AbstractDatagramTest {
 
     @Test
-    public void testMulticast() throws Throwable {
-        run();
+    public void testMulticast(TestInfo testInfo) throws Throwable {
+        run(testInfo, new Runner<Bootstrap, Bootstrap>() {
+            @Override
+            public void run(Bootstrap bootstrap, Bootstrap bootstrap2) throws Throwable {
+                testMulticast(bootstrap, bootstrap2);
+            }
+        });
     }
 
     public void testMulticast(Bootstrap sb, Bootstrap cb) throws Throwable {
         NetworkInterface iface = multicastNetworkInterface();
-        Assume.assumeNotNull("No NetworkInterface found that supports multicast and " +
-                internetProtocolFamily(), iface);
+        assumeTrue(iface != null, "No NetworkInterface found that supports multicast and " +
+                             socketInternetProtocalFamily());
 
         MulticastTestHandler mhandler = new MulticastTestHandler();
 
@@ -72,9 +80,11 @@ public class DatagramMulticastTest extends AbstractDatagramTest {
         cb.option(ChannelOption.IP_MULTICAST_IF, iface);
         cb.option(ChannelOption.SO_REUSEADDR, true);
 
-        Channel sc = sb.bind(newSocketAddress(iface)).sync().channel();
+        DatagramChannel sc = (DatagramChannel) sb.bind(newSocketAddress(iface)).sync().channel();
+        assertEquals(iface, sc.config().getNetworkInterface());
+        assertInterfaceAddress(iface, sc.config().getInterface());
 
-        InetSocketAddress addr = (InetSocketAddress) sc.localAddress();
+        InetSocketAddress addr = sc.localAddress();
         cb.localAddress(addr.getPort());
 
         if (sc instanceof OioDatagramChannel) {
@@ -85,6 +95,8 @@ public class DatagramMulticastTest extends AbstractDatagramTest {
             return;
         }
         DatagramChannel cc = (DatagramChannel) cb.bind().sync().channel();
+        assertEquals(iface, cc.config().getNetworkInterface());
+        assertInterfaceAddress(iface, cc.config().getInterface());
 
         InetSocketAddress groupAddress = SocketUtils.socketAddress(groupAddress(), addr.getPort());
 
@@ -103,8 +115,30 @@ public class DatagramMulticastTest extends AbstractDatagramTest {
         sc.writeAndFlush(new DatagramPacket(Unpooled.copyInt(1), groupAddress)).sync();
         mhandler.await();
 
+        cc.config().setLoopbackModeDisabled(false);
+        sc.config().setLoopbackModeDisabled(false);
+
+        assertFalse(cc.config().isLoopbackModeDisabled());
+        assertFalse(sc.config().isLoopbackModeDisabled());
+
+        cc.config().setLoopbackModeDisabled(true);
+        sc.config().setLoopbackModeDisabled(true);
+
+        assertTrue(cc.config().isLoopbackModeDisabled());
+        assertTrue(sc.config().isLoopbackModeDisabled());
+
         sc.close().awaitUninterruptibly();
         cc.close().awaitUninterruptibly();
+    }
+
+    private static void assertInterfaceAddress(NetworkInterface networkInterface, InetAddress expected) {
+        Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
+        while (addresses.hasMoreElements()) {
+            if (expected.equals(addresses.nextElement())) {
+                return;
+            }
+        }
+        fail();
     }
 
     private static final class MulticastTestHandler extends SimpleChannelInboundHandler<DatagramPacket> {
@@ -139,11 +173,11 @@ public class DatagramMulticastTest extends AbstractDatagramTest {
 
     @Override
     protected List<TestsuitePermutation.BootstrapComboFactory<Bootstrap, Bootstrap>> newFactories() {
-        return SocketTestPermutation.INSTANCE.datagram(internetProtocolFamily());
+        return SocketTestPermutation.INSTANCE.datagram(socketInternetProtocalFamily());
     }
 
     private InetSocketAddress newAnySocketAddress() throws UnknownHostException {
-        switch (internetProtocolFamily()) {
+        switch (socketInternetProtocalFamily()) {
             case IPv4:
                 return new InetSocketAddress(InetAddress.getByName("0.0.0.0"), 0);
             case IPv6:
@@ -157,7 +191,7 @@ public class DatagramMulticastTest extends AbstractDatagramTest {
         Enumeration<InetAddress> addresses = iface.getInetAddresses();
         while (addresses.hasMoreElements()) {
             InetAddress address = addresses.nextElement();
-            if (internetProtocolFamily().addressType().isAssignableFrom(address.getClass())) {
+            if (socketInternetProtocalFamily().addressType().isAssignableFrom(address.getClass())) {
                 return new InetSocketAddress(address, 0);
             }
         }
@@ -172,13 +206,13 @@ public class DatagramMulticastTest extends AbstractDatagramTest {
                 Enumeration<InetAddress> addresses = iface.getInetAddresses();
                 while (addresses.hasMoreElements()) {
                     InetAddress address = addresses.nextElement();
-                    if (internetProtocolFamily().addressType().isAssignableFrom(address.getClass())) {
+                    if (socketInternetProtocalFamily().addressType().isAssignableFrom(address.getClass())) {
                         MulticastSocket socket = new MulticastSocket(newAnySocketAddress());
                         socket.setReuseAddress(true);
                         socket.setNetworkInterface(iface);
                         try {
                             socket.send(new java.net.DatagramPacket(new byte[] { 1, 2, 3, 4 }, 4,
-                                    new InetSocketAddress(groupAddress(), 12345)));
+                                                                    new InetSocketAddress(groupAddress(), 12345)));
                             return iface;
                         } catch (IOException ignore) {
                             // Try the next interface
@@ -193,7 +227,7 @@ public class DatagramMulticastTest extends AbstractDatagramTest {
     }
 
     private String groupAddress() {
-        return internetProtocolFamily() == InternetProtocolFamily.IPv4 ?
+        return groupInternetProtocalFamily() == InternetProtocolFamily.IPv4?
                 "230.0.0.1" : "FF01:0:0:0:0:0:0:101";
     }
 }
